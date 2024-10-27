@@ -1,0 +1,59 @@
+# .github/workflows/release.yml
+name: Release
+
+on:
+  push:
+    tags:
+      - '*'
+
+permissions:
+  contents: write
+
+env:
+  LINUX_AMD64_BINARY: "sha256_example-amd64-${{ github.ref_name }}"
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    container:
+      image: alpine:edge
+    steps:
+      - name: Install dependencies
+        run: |
+          apk add zig openssl-libs-static openssl-dev
+
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Build binary
+        run: |
+          mkdir -p bin
+          zig build-exe -O ReleaseSmall -mcpu baseline -static -lc -lcrypto -femit-bin=bin/${LINUX_AMD64_BINARY} sha256_example.zig
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ env.LINUX_AMD64_BINARY }}
+          path: bin/${{ env.LINUX_AMD64_BINARY }}
+
+  release:
+    name: Release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download binary artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: ${{ env.LINUX_AMD64_BINARY }}
+          path: bin
+
+      - name: Create GitHub Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ github.ref_name }}
+          name: "Release ${{ github.ref_name }}"
+          artifacts: bin/${{ env.LINUX_AMD64_BINARY }}
+          draft: false
+          prerelease: false
+          token: ${{ secrets.GITHUB_TOKEN }}
